@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synapse | AI Test Dashboard</title>
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        :root {
+            --color-bg: #111827; /* Dark Slate Blue */
+            --color-surface: #1F2937; /* Lighter Slate */
+            --color-border: #374151;
+            --color-primary: #8B5CF6; /* Vibrant Purple */
+            --color-secondary: #EC4899; /* Vibrant Pink */
+            --color-success: #10B981; /* Green */
+            --color-error: #EF4444; /* Red */
+            --color-text: #F9FAFB; /* Off-white */
+            --color-text-muted: #9CA3AF;
+            --font-sans: 'Inter', sans-serif;
+            --font-mono: 'Fira Code', monospace;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap');
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- Main Layout --- */
+        .dashboard-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            grid-template-rows: 60px 1fr;
+            width: 100%;
+            height: 100%;
+            grid-template-areas:
+                "header header"
+                "sidebar main";
+        }
+
+        .header {
+            grid-area: header;
+            background-color: var(--color-surface);
+            border-bottom: 1px solid var(--color-border);
+            display: flex;
+            align-items: center;
+            padding: 0 1.5rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .header .logo {
+            background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .sidebar {
+            grid-area: sidebar;
+            background-color: var(--color-surface);
+            border-right: 1px solid var(--color-border);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .main-content {
+            grid-area: main;
+            overflow-y: auto;
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        
+        /* --- General Components --- */
+        .panel {
+            background-color: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+        }
+        .panel-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 0 0 1.5rem 0;
+            border-bottom: 1px solid var(--color-border);
+            padding-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* --- Sidebar Specific --- */
+        .sidebar-title {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--color-text-muted);
+            margin: 0 0 1rem 0;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        #test-suite-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            flex-grow: 1;
+        }
+        .test-suite-item {
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            margin-bottom: 0.5rem;
+        }
+        .test-suite-item:hover {
+            background-color: rgba(255,255,255,0.05);
+        }
+        .test-suite-item.active {
+            background-color: var(--color-primary);
+            color: white;
+        }
+        .btn {
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+        }
+        .btn-primary {
+            background-color: var(--color-primary);
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #7c4ee3;
+        }
+        .btn-secondary {
+            background-color: var(--color-border);
+            color: var(--color-text);
+        }
+        .btn-secondary:hover {
+            background-color: #4b5563;
+        }
+
+        /* --- Main Content Panels --- */
+        #test-editor-panel {
+            height: calc(100vh - 60px - 4rem);
+        }
+        #steps-textarea {
+            flex-grow: 1;
+            background-color: var(--color-bg);
+            border: 1px solid var(--color-border);
+            color: var(--color-text);
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            resize: none;
+        }
+        .editor-actions {
+            margin-top: 1rem;
+            display: flex;
+            gap: 1rem;
+        }
+        #run-test-btn, #record-btn {
+            flex-grow: 1;
+        }
+        .btn:disabled {
+            background-color: var(--color-text-muted);
+            cursor: not-allowed;
+        }
+
+        /* --- Dashboard Panel --- */
+        #dashboard-panel {
+            height: calc(100vh - 60px - 4rem);
+        }
+        #chart-container {
+            width: 100%;
+            max-width: 250px;
+            margin: 0 auto 1rem auto;
+        }
+        #results-log {
+            height: 200px; /* Fixed height for the log */
+            background-color: var(--color-bg);
+            border-radius: 6px;
+            padding: 1rem;
+            overflow-y: auto;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+        }
+        .log-entry {
+            padding: 0.5rem;
+            border-left: 3px solid;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .log-entry.success { border-color: var(--color-success); color: var(--color-success); }
+        .log-entry.error { border-color: var(--color-error); color: var(--color-error); }
+        .log-entry.info { border-color: var(--color-text-muted); color: var(--color-text-muted); }
+        
+        #artifacts-section {
+            border-top: 1px solid var(--color-border);
+            padding-top: 1rem;
+        }
+        .artifact-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--color-bg);
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+        }
+        .artifact-item a {
+            color: var(--color-primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .artifact-item a:hover {
+            text-decoration: underline;
+        }
+
+        .spinner {
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* --- Modal Styles --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            backdrop-filter: blur(5px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            display: none; /* Hidden by default */
+        }
+        .modal-content {
+            background-color: var(--color-surface);
+            padding: 2rem;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 500px;
+            border: 1px solid var(--color-border);
+        }
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0 0 1.5rem 0;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--color-text-muted);
+        }
+        .form-group input[type="text"], .form-group input[type="url"], .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border-radius: 6px;
+            border: 1px solid var(--color-border);
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            font-family: var(--font-sans);
+        }
+        .checkbox-group label {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            cursor: pointer;
+            margin-bottom: 0.5rem;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="dashboard-layout">
+        <header class="header">
+            <span class="logo">Synapse AI</span>
+        </header>
+
+        <aside class="sidebar">
+            <h2 class="sidebar-title">Test Suites</h2>
+            <ul id="test-suite-list"></ul>
+            <button id="add-suite-btn" class="btn btn-primary"><i class="fas fa-plus"></i> New Test Suite</button>
+        </aside>
+
+        <main class="main-content">
+            <section class="panel" id="test-editor-panel">
+                <h2 class="panel-title" id="editor-title">Test Case Editor</h2>
+                <textarea id="steps-textarea" placeholder="Enter test steps or record a new session..."></textarea>
+                <div class="editor-actions">
+                    <button id="record-btn" class="btn btn-secondary"><i class="fas fa-video"></i> Record</button>
+                    <button id="run-test-btn" class="btn btn-primary">
+                        <span id="run-btn-text"><i class="fas fa-play"></i> Run Test</span>
+                        <div id="run-spinner" class="spinner" style="display: none;"></div>
+                    </button>
+                </div>
+            </section>
+
+            <section class="panel" id="dashboard-panel">
+                <h2 class="panel-title">Execution Dashboard</h2>
+                <div id="chart-container">
+                    <canvas id="results-chart"></canvas>
+                </div>
+                <div id="results-log">
+                    <div class="log-entry info">Awaiting test execution...</div>
+                </div>
+                <div id="artifacts-section">
+                    <h3 class="sidebar-title">Test Artifacts</h3>
+                    <div id="artifacts-list">
+                        <!-- Download links will appear here -->
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Recording Modal -->
+    <div id="record-modal-overlay" class="modal-overlay">
+        <div class="modal-content">
+            <h2 class="modal-title">Start New Recording</h2>
+            <div class="form-group">
+                <label for="record-url">Starting URL</label>
+                <input type="url" id="record-url" value="https://github.com">
+            </div>
+            <div class="form-group">
+                <label>Outputs to Generate</label>
+                <div class="checkbox-group">
+                    <label><input type="checkbox" id="output-ui" checked> Generate UI Script</label>
+                </div>
+                <div class="checkbox-group">
+                    <label><input type="checkbox" id="output-jmx" checked> Generate API Test Plan (JMX)</label>
+                </div>
+            </div>
+            
+            <div id="ui-options" class="form-group">
+                 <div class="form-group">
+                    <label for="framework-select">Framework</label>
+                    <select id="framework-select">
+                        <option value="playwright">Playwright</option>
+                        <option value="cypress">Cypress</option>
+                        <option value="selenium">Selenium</option>
+                    </select>
+                </div>
+                 <div class="form-group">
+                    <label for="language-select">Language</label>
+                    <select id="language-select">
+                        <option value="javascript">JavaScript</option>
+                        <option value="python">Python</option>
+                        <option value="java">Java</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button id="cancel-record-btn" class="btn btn-secondary">Cancel</button>
+                <button id="start-record-btn" class="btn btn-primary"><i class="fas fa-video"></i> Start Recording</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // --- API Configuration ---
+        // When you deploy your backend, replace this placeholder with your actual Render URL.
+        const API_BASE_URL = 'http://localhost:3000'; // For local testing
+        // const API_BASE_URL = 'https://your-synapse-backend.onrender.com'; // For production
+
+        // --- Data Store ---
+        let testSuites = {
+            "ts_1": { name: "Login Functionality", steps: "Navigate to https://github.com/login\nType 'testuser' into input #login_field\nType 'wrongpassword' into input #password\nClick the 'Sign in' button\nAssert that element with text 'Incorrect username or password.' is visible" }
+        };
+        let activeSuiteId = "ts_1";
+
+        // --- DOM Elements ---
+        const suiteList = document.getElementById('test-suite-list');
+        const addSuiteBtn = document.getElementById('add-suite-btn');
+        const editorTitle = document.getElementById('editor-title');
+        const stepsTextarea = document.getElementById('steps-textarea');
+        const runTestBtn = document.getElementById('run-test-btn');
+        const runBtnText = document.getElementById('run-btn-text');
+        const runSpinner = document.getElementById('run-spinner');
+        const resultsLog = document.getElementById('results-log');
+        const chartCanvas = document.getElementById('results-chart');
+        const artifactsList = document.getElementById('artifacts-list');
+        const recordBtn = document.getElementById('record-btn');
+        const recordModal = document.getElementById('record-modal-overlay');
+        const cancelRecordBtn = document.getElementById('cancel-record-btn');
+        const startRecordBtn = document.getElementById('start-record-btn');
+        const recordUrlInput = document.getElementById('record-url');
+        const outputUiCheckbox = document.getElementById('output-ui');
+        const outputJmxCheckbox = document.getElementById('output-jmx');
+        const uiOptions = document.getElementById('ui-options');
+        const frameworkSelect = document.getElementById('framework-select');
+        const languageSelect = document.getElementById('language-select');
+
+        // --- Chart.js Instance ---
+        let resultsChart;
+        function createOrUpdateChart(pass = 0, fail = 0) {
+            const data = {
+                labels: ['Pass', 'Fail'],
+                datasets: [{ data: [pass, fail], backgroundColor: ['rgba(16, 185, 129, 0.5)', 'rgba(239, 68, 68, 0.5)'], borderColor: ['#10B981', '#EF4444'], borderWidth: 1 }]
+            };
+            if (resultsChart) {
+                resultsChart.data = data;
+                resultsChart.update();
+            } else {
+                resultsChart = new Chart(chartCanvas, { type: 'doughnut', data, options: { responsive: true, plugins: { legend: { display: false } } } });
+            }
+        }
+
+        // --- Core UI Functions ---
+        function renderSuiteList() {
+            suiteList.innerHTML = '';
+            Object.keys(testSuites).forEach(id => {
+                const item = document.createElement('li');
+                item.className = `test-suite-item ${id === activeSuiteId ? 'active' : ''}`;
+                item.textContent = testSuites[id].name;
+                item.dataset.id = id;
+                item.addEventListener('click', () => {
+                    activeSuiteId = id;
+                    renderSuiteList();
+                    loadActiveSuite();
+                });
+                suiteList.appendChild(item);
+            });
+        }
+
+        function loadActiveSuite() {
+            if (testSuites[activeSuiteId]) {
+                const suite = testSuites[activeSuiteId];
+                editorTitle.textContent = `Editor: ${suite.name}`;
+                stepsTextarea.value = suite.steps;
+                artifactsList.innerHTML = '';
+            }
+        }
+
+        function saveActiveSuite() {
+            if (testSuites[activeSuiteId]) {
+                testSuites[activeSuiteId].steps = stepsTextarea.value;
+            }
+        }
+
+        function renderLog(logData) {
+            resultsLog.innerHTML = '';
+            let passCount = 0, failCount = 0;
+            logData.forEach(item => {
+                const entry = document.createElement('div');
+                entry.className = `log-entry ${item.status}`;
+                const icon = item.status === 'success' ? '✅' : (item.status === 'error' ? '❌' : 'ℹ️');
+                if (item.status === 'success') passCount++;
+                if (item.status === 'error') failCount++;
+                entry.innerHTML = `<span>${icon}</span> <span>${item.message}</span>`;
+                resultsLog.appendChild(entry);
+            });
+            createOrUpdateChart(passCount, failCount);
+        }
+
+        // --- Event Listeners ---
+        addSuiteBtn.addEventListener('click', () => {
+            const suiteName = prompt("Enter new test suite name:", "New Test");
+            if (suiteName) {
+                const newId = `ts_${Date.now()}`;
+                testSuites[newId] = { name: suiteName, steps: `Navigate to https://example.com` };
+                activeSuiteId = newId;
+                renderSuiteList();
+                loadActiveSuite();
+            }
+        });
+        stepsTextarea.addEventListener('input', saveActiveSuite);
+        recordBtn.addEventListener('click', () => recordModal.style.display = 'flex');
+        cancelRecordBtn.addEventListener('click', () => recordModal.style.display = 'none');
+
+        frameworkSelect.addEventListener('change', () => {
+            if (frameworkSelect.value === 'cypress') {
+                languageSelect.innerHTML = '<option value="javascript">JavaScript</option>';
+                languageSelect.disabled = true;
+            } else {
+                languageSelect.innerHTML = '<option value="javascript">JavaScript</option><option value="python">Python</option><option value="java">Java</option>';
+                languageSelect.disabled = false;
+            }
+        });
+        outputUiCheckbox.addEventListener('change', () => {
+            uiOptions.style.display = outputUiCheckbox.checked ? 'block' : 'none';
+        });
+
+        // --- API Call: Start Recording ---
+        startRecordBtn.addEventListener('click', async () => {
+            recordModal.style.display = 'none';
+            resultsLog.innerHTML = `<div class="log-entry info">Starting recording session... Please use the new browser window that opens. Close it when you are finished.</div>`;
+            runTestBtn.disabled = true;
+            recordBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/record`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        startUrl: recordUrlInput.value,
+                        generateUI: outputUiCheckbox.checked,
+                        generateJMX: outputJmxCheckbox.checked,
+                        framework: frameworkSelect.value,
+                        language: languageSelect.value
+                    })
+                });
+
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                
+                if (data.uiScript) {
+                    stepsTextarea.value = data.uiScript;
+                    saveActiveSuite();
+                }
+                if (data.jmxFileContent) {
+                    const blob = new Blob([data.jmxFileContent], { type: 'text/xml' });
+                    const url = URL.createObjectURL(blob);
+                    artifactsList.innerHTML = `
+                        <div class="artifact-item">
+                            <span><i class="fas fa-file-alt"></i> api_test_plan.jmx</span>
+                            <a href="${url}" download="api_test_plan.jmx">Download</a>
+                        </div>`;
+                }
+                resultsLog.innerHTML = '<div class="log-entry success">Recording session finished successfully.</div>';
+
+            } catch (error) {
+                console.error("Recording Error:", error);
+                resultsLog.innerHTML = `<div class="log-entry error">Recording failed: ${error.message}</div>`;
+            } finally {
+                runTestBtn.disabled = false;
+                recordBtn.disabled = false;
+            }
+        });
+
+        // --- API Call: Run Test ---
+        runTestBtn.addEventListener('click', async () => {
+            const steps = stepsTextarea.value;
+            if (!steps.trim()) return alert("Please enter test steps.");
+            
+            runBtnText.innerHTML = 'Running...';
+            runSpinner.style.display = 'block';
+            runTestBtn.disabled = true;
+            recordBtn.disabled = true;
+            resultsLog.innerHTML = '<div class="log-entry info">Sending steps to AI for translation...</div>';
+            createOrUpdateChart(0, 0);
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/run-test`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ steps })
+                });
+
+                if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+
+                const data = await response.json();
+                renderLog(data.log);
+
+            } catch (error) {
+                console.error("Test Run Error:", error);
+                renderLog([{ status: 'error', message: `Failed to run test: ${error.message}` }]);
+            } finally {
+                runBtnText.innerHTML = '<i class="fas fa-play"></i> Run Test';
+                runSpinner.style.display = 'none';
+                runTestBtn.disabled = false;
+                recordBtn.disabled = false;
+            }
+        });
+
+        // --- Initial Load ---
+        renderSuiteList();
+        loadActiveSuite();
+        createOrUpdateChart();
+    </script>
+</body>
+</html>

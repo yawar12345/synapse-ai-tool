@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synapse | AI-Powered Test Automation</title>
+    <style>
+        :root {
+            --color-bg: #04020a;
+            --color-primary: #9B59B6;
+            --color-secondary: #D7BDE2;
+            --color-text: #FDFEFE;
+            --color-text-muted: #AAB7B8;
+            --font-sans: 'Orbitron', sans-serif;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+
+        .hero-section {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            flex-direction: column;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .hero-title {
+            font-size: clamp(3rem, 10vw, 7rem);
+            font-weight: 900;
+            margin: 0;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            background: linear-gradient(145deg, var(--color-primary) 0%, var(--color-primary) 30%, #ffffff 45%, #ffffff 55%, #1c1c1c 70%, #000000 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 20px rgba(155, 89, 182, 0.5);
+        }
+
+        .hero-subtitle {
+            font-size: clamp(1rem, 3vw, 1.25rem);
+            font-weight: 400;
+            margin: 1.5rem 0 2.5rem 0;
+            color: var(--color-text-muted);
+            max-width: 600px;
+            line-height: 1.7;
+            letter-spacing: 1px;
+        }
+
+        .cta-button {
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 700;
+            text-decoration: none;
+            color: var(--color-primary);
+            background-color: transparent;
+            border: 2px solid var(--color-primary);
+            padding: 0.8rem 2.5rem;
+            border-radius: 2px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            box-shadow: 0 0 15px 0 var(--color-primary) inset, 0 0 15px 0 var(--color-primary);
+        }
+
+        .cta-button:hover {
+            background-color: var(--color-primary);
+            color: var(--color-bg);
+            box-shadow: 0 0 25px 0 var(--color-primary);
+        }
+        
+        #main-content {
+            padding: 10rem 2rem;
+            background: linear-gradient(to bottom, transparent, #04020a 20%);
+            position: relative;
+            z-index: 1;
+        }
+        
+        .content-container {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            padding: 3rem;
+            border: 1px solid rgba(155, 89, 182, 0.2);
+        }
+        
+        .content-container h2 {
+            font-size: 3rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--color-primary);
+            margin-bottom: 2rem;
+        }
+        
+        .content-container p {
+            font-size: 1.1rem;
+            line-height: 1.8;
+            color: var(--color-text-muted);
+        }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="bg-canvas"></canvas>
+
+    <section class="hero-section">
+        <h1 class="hero-title">Synapse</h1>
+        <p class="hero-subtitle">
+            An intelligent core for seamless automation. Translating intent into action across the digital cosmos.
+        </p>
+        <a href="/dashboard.html" class="cta-button">Launch Dashboard</a>
+    </section>
+
+    <!-- Importmap for Three.js -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg-canvas'), antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        camera.position.z = 15;
+
+        const ambientLight = new THREE.AmbientLight(0x210B2C, 1.5);
+        scene.add(ambientLight);
+        const primaryLight = new THREE.PointLight(0x9B59B6, 150, 250);
+        primaryLight.position.set(-10, 5, 10);
+        scene.add(primaryLight);
+
+        const planetGeometry = new THREE.SphereGeometry(4, 64, 64);
+        const planetMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                uTime: { value: 0 },
+                uColor1: { value: new THREE.Color('#9B59B6') },
+                uColor2: { value: new THREE.Color('#04020a') }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                varying vec3 vNormal;
+                void main() {
+                    vUv = uv;
+                    vNormal = normalize(normalMatrix * normal);
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform float uTime;
+                uniform vec3 uColor1;
+                uniform vec3 uColor2;
+                varying vec2 vUv;
+                varying vec3 vNormal;
+                vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+                vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+                vec3 fade(vec3 t) {return t*t*t*(t*(t*6.0-15.0)+10.0);}
+                float cnoise(vec3 P){vec3 Pi0=floor(P);vec3 Pi1=Pi0+vec3(1.0);Pi0=mod(Pi0,289.0);Pi1=mod(Pi1,289.0);vec3 Pf0=fract(P);vec3 Pf1=Pf0-vec3(1.0);vec4 ix=vec4(Pi0.x,Pi1.x,Pi0.x,Pi1.x);vec4 iy=vec4(Pi0.yy,Pi1.yy);vec4 iz0=Pi0.zzzz;vec4 iz1=Pi1.zzzz;vec4 ixy=permute(permute(ix)+iy);vec4 ixy0=permute(ixy+iz0);vec4 ixy1=permute(ixy+iz1);vec4 gx0=ixy0/7.0;vec4 gy0=fract(floor(gx0)/7.0)-0.5;gx0=fract(gx0);vec4 gz0=vec4(0.5)-abs(gx0)-abs(gy0);vec4 sz0=step(gz0,vec4(0.0));gx0-=sz0*(step(0.0,gx0)-0.5);gy0-=sz0*(step(0.0,gy0)-0.5);vec4 gx1=ixy1/7.0;vec4 gy1=fract(floor(gx1)/7.0)-0.5;gx1=fract(gx1);vec4 gz1=vec4(0.5)-abs(gx1)-abs(gy1);vec4 sz1=step(gz1,vec4(0.0));gx1-=sz1*(step(0.0,gx1)-0.5);gy1-=sz1*(step(0.0,gy1)-0.5);vec3 g000=vec3(gx0.x,gy0.x,gz0.x);vec3 g100=vec3(gx0.y,gy0.y,gz0.y);vec3 g010=vec3(gx0.z,gy0.z,gz0.z);vec3 g110=vec3(gx0.w,gy0.w,gz0.w);vec3 g001=vec3(gx1.x,gy1.x,gz1.x);vec3 g101=vec3(gx1.y,gy1.y,gz1.y);vec3 g011=vec3(gx1.z,gy1.z,gz1.z);vec3 g111=vec3(gx1.w,gy1.w,gz1.w);vec4 norm0=taylorInvSqrt(vec4(dot(g000,g000),dot(g010,g010),dot(g100,g100),dot(g110,g110)));g000*=norm0.x;g010*=norm0.y;g100*=norm0.z;g110*=norm0.w;vec4 norm1=taylorInvSqrt(vec4(dot(g001,g001),dot(g011,g011),dot(g101,g101),dot(g111,g111)));g001*=norm1.x;g011*=norm1.y;g101*=norm1.z;g111*=norm1.w;float n000=dot(g000,Pf0);float n100=dot(g100,vec3(Pf1.x,Pf0.yz));float n010=dot(g010,vec3(Pf0.x,Pf1.y,Pf0.z));float n110=dot(g110,vec3(Pf1.xy,Pf0.z));float n001=dot(g001,vec3(Pf0.xy,Pf1.z));float n101=dot(g101,vec3(Pf1.x,Pf0.y,Pf1.z));float n011=dot(g011,vec3(Pf0.x,Pf1.yz));float n111=dot(g111,Pf1);vec3 fade_xyz=fade(Pf0);vec4 n_z=mix(vec4(n000,n100,n010,n110),vec4(n001,n101,n011,n111),fade_xyz.z);vec2 n_yz=mix(n_z.xy,n_z.zw,fade_xyz.y);float n_xyz=mix(n_yz.x,n_yz.y,fade_xyz.x);return 2.2*n_xyz;}
+                void main() {
+                    float noise = cnoise(vec3(vUv * 4.0, uTime * 0.2));
+                    vec3 color = mix(uColor1, uColor2, smoothstep(0.0, 1.0, noise));
+                    float fresnel = 1.0 - dot(vNormal, vec3(0.0, 0.0, 1.0));
+                    fresnel = pow(fresnel, 3.0);
+                    vec3 finalColor = color + fresnel * uColor1 * 2.0;
+                    gl_FragColor = vec4(finalColor, 1.0);
+                }
+            `
+        });
+        const digitalPlanet = new THREE.Mesh(planetGeometry, planetMaterial);
+        scene.add(digitalPlanet);
+
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 20000;
+        const posArray = new Float32Array(particlesCount * 3);
+        for(let i = 0; i < particlesCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 300;
+        }
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const particlesMaterial = new THREE.PointsMaterial({ color: 0x9B59B6, size: 0.2, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.4 });
+        const galaxy = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(galaxy);
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        });
+
+        const clock = new THREE.Clock();
+        function animate() {
+            const elapsedTime = clock.getElapsedTime();
+            digitalPlanet.material.uniforms.uTime.value = elapsedTime;
+            digitalPlanet.rotation.y = elapsedTime * 0.1;
+            galaxy.rotation.y = elapsedTime * 0.05;
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+        animate();
+    </script>
+</body>
+</html>
