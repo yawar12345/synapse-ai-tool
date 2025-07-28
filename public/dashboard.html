@@ -8,31 +8,40 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         :root {
-            --color-bg: #111827; /* Dark Slate Blue */
-            --color-surface: #1F2937; /* Lighter Slate */
+            --color-bg: #04020a;
+            --color-surface: #111827;
             --color-border: #374151;
-            --color-primary: #8B5CF6; /* Vibrant Purple */
-            --color-secondary: #EC4899; /* Vibrant Pink */
-            --color-success: #10B981; /* Green */
-            --color-error: #EF4444; /* Red */
-            --color-text: #F9FAFB; /* Off-white */
-            --color-text-muted: #9CA3AF;
-            --font-sans: 'Inter', sans-serif;
+            --color-primary: #a855f7; /* Purple */
+            --color-secondary: #d8b4fe; /* Light Purple */
+            --color-success: #34D399; /* Green */
+            --color-error: #F87171; /* Red */
+            --color-text: #e5e7eb;
+            --color-text-muted: #9ca3af;
+            --font-sans: 'Chakra Petch', sans-serif;
+            --font-body: 'Inter', sans-serif;
             --font-mono: 'Fira Code', monospace;
         }
 
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@700&family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400&display=swap');
 
         * { box-sizing: border-box; }
 
         body {
-            font-family: var(--font-sans);
-            background-color: var(--color-bg);
+            font-family: var(--font-body);
+            background: linear-gradient(-45deg, #04020a, #111827, #210B2C, #04020a);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
             color: var(--color-text);
             margin: 0;
             display: flex;
             height: 100vh;
             overflow: hidden;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
         }
 
         /* --- Main Layout --- */
@@ -54,11 +63,14 @@
             display: flex;
             align-items: center;
             padding: 0 1.5rem;
-            font-size: 1.25rem;
-            font-weight: 600;
         }
         .header .logo {
-            background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+            font-family: var(--font-sans);
+            font-size: 1.5rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            background: linear-gradient(45deg, var(--color-primary), var(--color-secondary));
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -84,7 +96,8 @@
         
         /* --- General Components --- */
         .panel {
-            background-color: var(--color-surface);
+            background: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(10px);
             border: 1px solid var(--color-border);
             border-radius: 8px;
             padding: 1.5rem;
@@ -92,20 +105,24 @@
             flex-direction: column;
         }
         .panel-title {
-            font-size: 1.1rem;
-            font-weight: 600;
+            font-family: var(--font-sans);
+            font-size: 1.25rem;
+            font-weight: 700;
             margin: 0 0 1.5rem 0;
             border-bottom: 1px solid var(--color-border);
             padding-bottom: 1rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         /* --- Sidebar Specific --- */
         .sidebar-title {
-            font-size: 0.9rem;
-            font-weight: 500;
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 700;
             color: var(--color-text-muted);
             margin: 0 0 1rem 0;
             text-transform: uppercase;
@@ -116,41 +133,49 @@
             padding: 0;
             margin: 0;
             flex-grow: 1;
+            overflow-y: auto;
         }
         .test-suite-item {
             padding: 0.75rem 1rem;
             border-radius: 6px;
             cursor: pointer;
             font-weight: 500;
-            transition: background-color 0.2s;
+            transition: background-color 0.2s, color 0.2s;
             margin-bottom: 0.5rem;
+            border: 1px solid transparent;
         }
         .test-suite-item:hover {
-            background-color: rgba(255,255,255,0.05);
+            background-color: rgba(168, 85, 247, 0.1);
         }
         .test-suite-item.active {
             background-color: var(--color-primary);
             color: white;
+            font-weight: 600;
         }
         .btn {
+            font-family: var(--font-sans);
             padding: 0.75rem 1rem;
             border-radius: 6px;
             border: none;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            transition: background-color 0.2s;
+            transition: all 0.2s;
             text-align: center;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 0.75rem;
+            text-transform: uppercase;
         }
         .btn-primary {
             background-color: var(--color-primary);
             color: white;
+            box-shadow: 0 0 15px rgba(168, 85, 247, 0.4);
         }
         .btn-primary:hover {
-            background-color: #7c4ee3;
+            background-color: var(--color-secondary);
+            color: var(--color-bg);
+            box-shadow: 0 0 25px rgba(216, 180, 254, 0.6);
         }
         .btn-secondary {
             background-color: var(--color-border);
@@ -186,6 +211,7 @@
         .btn:disabled {
             background-color: var(--color-text-muted);
             cursor: not-allowed;
+            opacity: 0.5;
         }
 
         /* --- Dashboard Panel --- */
@@ -194,11 +220,11 @@
         }
         #chart-container {
             width: 100%;
-            max-width: 250px;
+            max-width: 200px;
             margin: 0 auto 1rem auto;
         }
         #results-log {
-            height: 200px; /* Fixed height for the log */
+            height: 200px;
             background-color: var(--color-bg);
             border-radius: 6px;
             padding: 1rem;
@@ -214,6 +240,7 @@
             display: flex;
             align-items: center;
             gap: 0.75rem;
+            background-color: rgba(0,0,0,0.2);
         }
         .log-entry.success { border-color: var(--color-success); color: var(--color-success); }
         .log-entry.error { border-color: var(--color-error); color: var(--color-error); }
@@ -262,7 +289,7 @@
             justify-content: center;
             align-items: center;
             z-index: 1000;
-            display: none; /* Hidden by default */
+            display: none;
         }
         .modal-content {
             background-color: var(--color-surface);
@@ -273,8 +300,9 @@
             border: 1px solid var(--color-border);
         }
         .modal-title {
+            font-family: var(--font-sans);
             font-size: 1.25rem;
-            font-weight: 600;
+            font-weight: 700;
             margin: 0 0 1.5rem 0;
         }
         .form-group {
@@ -292,7 +320,7 @@
             border: 1px solid var(--color-border);
             background-color: var(--color-bg);
             color: var(--color-text);
-            font-family: var(--font-sans);
+            font-family: var(--font-body);
         }
         .checkbox-group label {
             display: flex;
@@ -314,7 +342,7 @@
 
     <div class="dashboard-layout">
         <header class="header">
-            <span class="logo">Synapse AI</span>
+            <a href="/" style="text-decoration: none;"><span class="logo">Synapse AI</span></a>
         </header>
 
         <aside class="sidebar">
@@ -401,8 +429,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         // --- API Configuration ---
-        // When you deploy your backend, replace this placeholder with your actual Render URL.
-        const API_BASE_URL = 'https://synapse-ai-tool.onrender.com'; // For local testing
+        const API_BASE_URL = 'http://localhost:3000'; // For local testing
         // const API_BASE_URL = 'https://your-synapse-backend.onrender.com'; // For production
 
         // --- Data Store ---
@@ -438,7 +465,7 @@
         function createOrUpdateChart(pass = 0, fail = 0) {
             const data = {
                 labels: ['Pass', 'Fail'],
-                datasets: [{ data: [pass, fail], backgroundColor: ['rgba(16, 185, 129, 0.5)', 'rgba(239, 68, 68, 0.5)'], borderColor: ['#10B981', '#EF4444'], borderWidth: 1 }]
+                datasets: [{ data: [pass, fail], backgroundColor: ['rgba(52, 211, 153, 0.2)', 'rgba(248, 113, 113, 0.2)'], borderColor: ['#34D399', '#F87171'], borderWidth: 1 }]
             };
             if (resultsChart) {
                 resultsChart.data = data;

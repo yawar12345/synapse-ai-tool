@@ -4,8 +4,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-      "postinstall": "npx playwright install --with-deps"
-
+    "postinstall": "npx playwright install --with-deps"
   },
   "keywords": [],
   "author": "",
@@ -13,9 +12,9 @@
   "description": "",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@playwright/browser-chromium": "^1.54.1",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
-    "playwright": "^1.54.1",
-    "@playwright/browser-chromium": "^1.45.1"
+    "playwright": "^1.54.1"
   }
 }

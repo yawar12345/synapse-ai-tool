@@ -9,8 +9,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const os = require('os');
 const { exec } = require('child_process');
-// --- NEW: Import the browser package ---
-const playwrightChromium = require('@playwright/browser-chromium');
+// --- We no longer need to import the browser package directly ---
 
 // --- 2. Initialize Express App ---
 const app = express();
@@ -34,7 +33,47 @@ app.post('/api/run-test', async (req, res) => {
 
     const resultsLog = [];
     try {
-        const prompt = `You are an expert Test Automation Engineer. Convert plain English to a JSON array of Playwright commands. Actions: "navigate", "click", "type", "assertVisible", "wait". For text selectors, use "text=Your Text". Do not use ":contains()". Respond ONLY with the JSON array. USER STEPS: ${steps}`;
+        // --- FIX: A more robust prompt that understands synonyms ---
+        const prompt = `
+        You are a highly intelligent and precise language-to-JSON converter for a test automation system. Your ONLY job is to convert the user's plain English steps into a structured JSON array based on the strict rules below.
+
+        **Rules:**
+        1.  Analyze each line of the user's input to determine the core action.
+        2.  Map the action to one of the following official command objects. Be flexible with synonyms.
+
+        **Command Mapping:**
+        -   If the user says "navigate", "go to", "open", or "visit" a URL, you MUST create this object:
+            \`{ "action": "navigate", "url": "THE_URL" }\`
+        -   If the user says "click", "press", or "tap" an element, you MUST create this object:
+            \`{ "action": "click", "selector": "THE_CSS_SELECTOR" }\`
+        -   If the user says "type", "fill", "enter", "input", or "write" text, you MUST create this object:
+            \`{ "action": "type", "selector": "THE_CSS_SELECTOR", "text": "THE_TEXT" }\`
+        -   If the user says "check", "assert", "verify", "see", or "find" an element, you MUST create this object:
+            \`{ "action": "assertVisible", "selector": "THE_CSS_SELECTOR_OR_TEXT_SELECTOR" }\`
+        -   If the user says "wait", "pause", "sleep", or "delay", you MUST create this object:
+            \`{ "action": "wait", "duration": THE_MILLISECONDS }\`
+
+        **Selector Rules:**
+        -   For finding elements by their text content, you MUST use the format: \`"selector": "text=The exact text"\`.
+        -   For all other elements, use standard CSS selectors (e.g., \`input[name="email"]\`).
+        -   **NEVER** use non-standard selectors like \`:contains()\`. It is invalid.
+
+        **Example:**
+        User Input:
+        \`navigate https://google.com\`
+        \`type "testing" in the search bar\`
+
+        Your Correct JSON Output:
+        [
+          { "action": "navigate", "url": "https://google.com" },
+          { "action": "type", "selector": "[aria-label='Search']", "text": "testing" }
+        ]
+
+        Now, convert the following user steps. Respond ONLY with the JSON array, nothing else.
+
+        **User Steps:**
+        ${steps}
+        `;
         const aiResult = await aiModel.generateContent(prompt);
         const jsonText = aiResult.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         
@@ -46,9 +85,8 @@ app.post('/api/run-test', async (req, res) => {
             throw new Error(`AI returned invalid JSON. Response: ${jsonText}`);
         }
 
-        // --- FIX: Tell Playwright where to find the browser executable ---
-        const executablePath = playwrightChromium.executablePath();
-        const browser = await chromium.launch({ headless: true, executablePath });
+        // --- FIX: Removed the executablePath. Playwright finds it automatically now. ---
+        const browser = await chromium.launch({ headless: true });
         const context = await browser.newContext();
         const page = await context.newPage();
         resultsLog.push({ status: 'info', message: 'Browser launched.' });
