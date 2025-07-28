@@ -3,6 +3,7 @@
 // --- 1. Import Dependencies ---
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors'); // Import the cors package
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { chromium } = require('playwright');
 const fs = require('fs/promises');
@@ -14,6 +15,7 @@ const { exec } = require('child_process');
 // --- 2. Initialize Express App ---
 const app = express();
 const port = 3000;
+app.use(cors()); // --- FIX: Enable CORS for all requests ---
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
