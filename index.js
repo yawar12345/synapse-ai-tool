@@ -1,11 +1,10 @@
-// index.js - The Complete and Fully Functional Backend Server with Groq Fallback
+// index.js - The Complete and Fully Functional Backend Server
 
 // --- 1. Import Dependencies ---
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const Groq = require('groq-sdk'); // NEW: Import Groq
 const { chromium } = require('playwright');
 const fs = require('fs/promises');
 const path = require('path');
@@ -26,55 +25,38 @@ if (!process.env.GEMINI_API_KEY) {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
-// NEW: Initialize Groq Client
 let groq;
 if (process.env.GROQ_API_KEY) {
-    groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    groq = new (require('groq-sdk'))({ apiKey: process.env.GROQ_API_KEY });
 } else {
     console.warn("\nWARNING: GROQ_API_KEY is not found in .env file. Fallback functionality will be disabled.");
 }
 
-
-// --- NEW: Resilient AI Call Helper with Groq Fallback Logic ---
+// --- Resilient AI Call Helper with Groq Fallback Logic ---
 async function generateContentWithFallback(prompt) {
-    // --- Step 1: Try Gemini first ---
     try {
         console.log("Attempting to generate content with Gemini...");
         const result = await geminiModel.generateContent(prompt);
-        console.log("Gemini succeeded.");
         return result.response.text();
     } catch (geminiError) {
         console.error("Gemini API Error:", geminiError.message);
-        
-        // --- Step 2: If Gemini fails, fall back to Groq (if available) ---
         if (groq) {
             console.warn("Gemini failed. Falling back to Groq...");
             try {
                 const chatCompletion = await groq.chat.completions.create({
-                    messages: [
-                        {
-                            role: "user",
-                            content: prompt,
-                        },
-                    ],
-                    model: "llama3-8b-8192", // Fast and capable model
+                    messages: [{ role: "user", content: prompt }],
+                    model: "llama3-8b-8192",
                 });
-                
-                console.log("Groq succeeded.");
                 return chatCompletion.choices[0]?.message?.content || "";
-
             } catch (groqError) {
                 console.error("Groq API Error:", groqError.message);
-                // If both fail, throw a final error
                 throw new Error("Both Gemini and Groq APIs failed.");
             }
         } else {
-            // If Groq is not configured, just re-throw the original Gemini error
             throw geminiError;
         }
     }
 }
-
 
 // --- 4. API Endpoint to Run Tests ---
 app.post('/api/run-test', async (req, res) => {
@@ -84,9 +66,78 @@ app.post('/api/run-test', async (req, res) => {
 
     const resultsLog = [];
     try {
-        const prompt = `You are a highly intelligent language-to-JSON converter. Convert the user's plain English steps into a structured JSON array based on the strict rules below. Map synonyms like "go to" or "open" to the "navigate" action. For text selectors, use "text=Your Text". NEVER use ":contains()". Respond ONLY with the JSON array. USER STEPS: ${steps}`;
-        
-        const responseText = await generateContentWithFallback(prompt); // Use the new fallback function
+        // --- NEW: Hyper-Robust Prompt for Maximum Edge Case Coverage ---
+        const prompt = `
+        You are a meticulous and senior Test Automation Engineer. Your sole purpose is to convert unstructured, human-friendly test steps into a perfectly structured JSON array for an automation script. You must be extremely intelligent in interpreting user intent and resilient to ambiguous language.
+
+        **Core Task: Convert the user's steps into a JSON array based on the following strict schema and rules.**
+
+        ---
+        ### **JSON Schema & Command Mapping**
+        You MUST map the user's intent to one of the following official commands.
+
+        1.  **Navigate to a URL**
+            * **User Synonyms:** "navigate", "go to", "open", "visit", "launch"
+            * **JSON Object:** \`{ "action": "navigate", "url": "THE_URL" }\`
+
+        2.  **Click an element**
+            * **User Synonyms:** "click", "press", "tap", "select", "hit"
+            * **JSON Object:** \`{ "action": "click", "selector": "THE_CSS_SELECTOR" }\`
+
+        3.  **Type text into a field**
+            * **User Synonyms:** "type", "fill", "enter", "input", "write", "put"
+            * **JSON Object:** \`{ "action": "type", "selector": "THE_CSS_SELECTOR", "text": "THE_TEXT" }\`
+
+        4.  **Assert an element is visible**
+            * **User Synonyms:** "check", "assert", "verify", "see", "find", "ensure"
+            * **JSON Object:** \`{ "action": "assertVisible", "selector": "THE_CSS_SELECTOR_OR_TEXT_SELECTOR" }\`
+
+        ---
+        ### **Intelligent Selector Inference Rules**
+        This is your most important task. You must intelligently infer the best CSS selector.
+
+        * **If the user gives a direct selector (e.g., "#username"), use it.**
+        * **If the user describes an element (e.g., "the login button"), create a robust selector.**
+            * For buttons: \`button:has-text("Login")\` or \`[role="button"][name="Login"]\`
+            * For inputs: \`input[name="username"]\`, \`[placeholder="Enter username"]\`, or \`#username\`
+            * For links: \`a:has-text("Forgot Password")\`
+        * **For text assertions, you MUST use Playwright's text selector format:** \`"selector": "text=The exact text to find"\`.
+        * **NEVER use invalid or deprecated selectors like \`:contains()\`.**
+
+        ---
+        ### **Edge Case Handling**
+
+        * **Multiple Commands on One Line:** Deconstruct them into separate JSON objects in the correct order.
+        * **Ambiguous Selectors:** If a user says "click the button", and there might be many, choose the most likely one based on context (e.g., a submit button in a form).
+        * **Quotes and Special Characters:** Ensure any quotes within the user's text are properly escaped for the final JSON string.
+
+        ---
+        ### **Example Scenarios**
+
+        **Scenario 1 (Complex Single Line):**
+        * **User Input:** "go to https://github.com/login then enter username 'test-user' and password 'secret123!' and click the Sign in button"
+        * **Your Correct JSON Output:**
+            [
+              { "action": "navigate", "url": "https://github.com/login" },
+              { "action": "type", "selector": "#login_field", "text": "test-user" },
+              { "action": "type", "selector": "#password", "text": "secret123!" },
+              { "action": "click", "selector": "input[name='commit']" }
+            ]
+
+        **Scenario 2 (Vague Assertion):**
+        * **User Input:** "verify the error message 'Incorrect username or password.' is visible"
+        * **Your Correct JSON Output:**
+            [
+              { "action": "assertVisible", "selector": "text=Incorrect username or password." }
+            ]
+
+        ---
+        **Final Instruction:** Convert the following user steps. Respond ONLY with the valid JSON array and nothing else.
+
+        **User Steps:**
+        ${steps}
+        `;
+        const responseText = await generateContentWithFallback(prompt);
         const jsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
         
         let commands;
@@ -185,7 +236,7 @@ app.post('/api/record', (req, res) => {
                     const playwrightCode = await fs.readFile(tempCodeFile, 'utf-8');
                     if (playwrightCode) {
                         const prompt = `You are an expert Test Automation Engineer. Convert a recorded Playwright script into a clean, runnable test script for the framework "${framework}" and language "${language}". The script must be complete, including all necessary imports and boilerplate. Respond ONLY with the raw code. SOURCE SCRIPT: \`\`\`javascript\n${playwrightCode}\n\`\`\``;
-                        const responseText = await generateContentWithFallback(prompt); // Use the new fallback function
+                        const responseText = await generateContentWithFallback(prompt);
                         uiScript = responseText.replace(/```[\w\s]*\n/g, '').replace(/```/g, '');
                         console.log(`Generated UI script for ${framework}/${language}.`);
                     }
@@ -231,7 +282,7 @@ app.post('/api/generate-cases', async (req, res) => {
 
     try {
         const prompt = `You are a Senior QA Engineer. Based on the following feature description, generate a comprehensive list of test steps in plain English. The steps should be clear, concise, and ready to be executed. Each step should be on a new line. FEATURE DESCRIPTION: "${description}" TEST STEPS:`;
-        const responseText = await generateContentWithFallback(prompt); // Use the new fallback function
+        const responseText = await generateContentWithFallback(prompt);
         const generatedSteps = responseText.trim();
         
         console.log("Generated test cases.");
