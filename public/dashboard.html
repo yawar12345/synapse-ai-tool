@@ -492,7 +492,14 @@
 
 
         // --- Dashboard Logic ---
-        const API_BASE_URL = 'http://localhost:3000';
+        // --- IMPORTANT CONFIGURATION ---
+        // This is the URL of your deployed backend server on Render.
+        // You MUST replace the placeholder with your actual URL for the live app to work.
+        const API_BASE_URL = 'https://synapse-ai-tool.onrender.com'; // <-- FIX: Use your actual Render URL
+
+        // For local testing, you can use this line instead:
+        // const API_BASE_URL = 'http://localhost:3000'; 
+        
         let testSuites = {
             "ts_1": { name: "Login Functionality", steps: "Navigate to https://github.com/login\nType 'testuser' into input #login_field\nType 'wrongpassword' into input #password\nClick the 'Sign in' button\nAssert that element with text 'Incorrect username or password.' is visible" }
         };
