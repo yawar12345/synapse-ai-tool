@@ -27,6 +27,28 @@ if (!process.env.GEMINI_API_KEY) {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const aiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
+
+// --- NEW: Resilient AI Call Helper with Retry Logic ---
+async function generateContentWithRetry(prompt, retries = 3, delay = 1000) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const result = await aiModel.generateContent(prompt);
+            return result;
+        } catch (error) {
+            // Check if the error is a 503 Service Unavailable
+            if (error.status === 503 && i < retries - 1) {
+                console.warn(`AI model is overloaded. Retrying in ${delay / 1000}s... (Attempt ${i + 1})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2; // Exponential backoff
+            } else {
+                // For other errors or last retry, throw the error
+                throw error;
+            }
+        }
+    }
+}
+
+
 // --- 4. API Endpoint to Run Tests ---
 app.post('/api/run-test', async (req, res) => {
     console.log("Received test execution request...");
@@ -35,9 +57,7 @@ app.post('/api/run-test', async (req, res) => {
 
     const resultsLog = [];
     try {
-        // --- FIX: A more robust prompt that understands synonyms ---
-        const prompt = `
-        You are a highly intelligent and precise language-to-JSON converter for a test automation system. Your ONLY job is to convert the user's plain English steps into a structured JSON array based on the strict rules below.
+        const prompt = `You are a highly intelligent and precise language-to-JSON converter for a test automation system. Your ONLY job is to convert the user's plain English steps into a structured JSON array based on the strict rules below.
 
         **Rules:**
         1.  Analyze each line of the user's input to determine the core action.
@@ -76,7 +96,7 @@ app.post('/api/run-test', async (req, res) => {
         **User Steps:**
         ${steps}
         `;
-        const aiResult = await aiModel.generateContent(prompt);
+        const aiResult = await generateContentWithRetry(prompt); // Use the new retry function
         const jsonText = aiResult.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         
         let commands;
@@ -87,7 +107,6 @@ app.post('/api/run-test', async (req, res) => {
             throw new Error(`AI returned invalid JSON. Response: ${jsonText}`);
         }
 
-        // --- FIX: Removed the executablePath. Playwright finds it automatically now. ---
         const browser = await chromium.launch({ headless: true });
         const context = await browser.newContext();
         const page = await context.newPage();
@@ -176,7 +195,7 @@ app.post('/api/record', (req, res) => {
                     const playwrightCode = await fs.readFile(tempCodeFile, 'utf-8');
                     if (playwrightCode) {
                         const prompt = `You are an expert Test Automation Engineer. Convert a recorded Playwright script into a clean, runnable test script for the framework "${framework}" and language "${language}". The script must be complete, including all necessary imports and boilerplate. Respond ONLY with the raw code. SOURCE SCRIPT: \`\`\`javascript\n${playwrightCode}\n\`\`\``;
-                        const aiResult = await aiModel.generateContent(prompt);
+                        const aiResult = await generateContentWithRetry(prompt); // Use the new retry function
                         uiScript = aiResult.response.text().trim().replace(/```[\w\s]*\n/g, '').replace(/```/g, '');
                         console.log(`Generated UI script for ${framework}/${language}.`);
                     }
@@ -222,10 +241,12 @@ app.post('/api/generate-cases', async (req, res) => {
 
     try {
         const prompt = `You are a Senior QA Engineer. Based on the following feature description, generate a comprehensive list of test steps in plain English. The steps should be clear, concise, and ready to be executed. Each step should be on a new line. FEATURE DESCRIPTION: "${description}" TEST STEPS:`;
-        const aiResult = await aiModel.generateContent(prompt);
+        const aiResult = await generateContentWithRetry(prompt); // Use the new retry function
         const generatedSteps = aiResult.response.text().trim();
+        
         console.log("Generated test cases.");
         res.status(200).json({ steps: generatedSteps });
+
     } catch (error) {
         console.error('Error generating test cases:', error);
         res.status(500).json({ error: `Failed to generate test cases: ${error.message}` });
