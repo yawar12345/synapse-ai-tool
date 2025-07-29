@@ -9,8 +9,8 @@
     <style>
         :root {
             --color-bg: #04020a;
-            --color-surface: #111827;
-            --color-border: #374151;
+            --color-surface: rgba(17, 24, 39, 0.8); /* Semi-transparent for glass effect */
+            --color-border: rgba(168, 85, 247, 0.3);
             --color-primary: #a855f7; /* Purple */
             --color-secondary: #d8b4fe; /* Light Purple */
             --color-success: #34D399; /* Green */
@@ -28,20 +28,20 @@
 
         body {
             font-family: var(--font-body);
-            background: linear-gradient(-45deg, #04020a, #111827, #210B2C, #04020a);
-            background-size: 400% 400%;
-            animation: gradientBG 15s ease infinite;
+            background-color: var(--color-bg);
             color: var(--color-text);
             margin: 0;
-            display: flex;
             height: 100vh;
             overflow: hidden;
         }
 
-        @keyframes gradientBG {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
         }
 
         /* --- Main Layout --- */
@@ -54,11 +54,19 @@
             grid-template-areas:
                 "header header"
                 "sidebar main";
+            opacity: 0;
+            animation: fadeIn 1s ease-out forwards;
+            animation-delay: 0.5s;
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; }
         }
 
         .header {
             grid-area: header;
-            background-color: var(--color-surface);
+            background: var(--color-surface);
+            backdrop-filter: blur(10px);
             border-bottom: 1px solid var(--color-border);
             display: flex;
             align-items: center;
@@ -74,11 +82,13 @@
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
+            text-decoration: none;
         }
 
         .sidebar {
             grid-area: sidebar;
-            background-color: var(--color-surface);
+            background: var(--color-surface);
+            backdrop-filter: blur(10px);
             border-right: 1px solid var(--color-border);
             padding: 1.5rem;
             display: flex;
@@ -96,14 +106,21 @@
         
         /* --- General Components --- */
         .panel {
-            background: rgba(17, 24, 39, 0.8);
+            background: var(--color-surface);
             backdrop-filter: blur(10px);
             border: 1px solid var(--color-border);
             border-radius: 8px;
             padding: 1.5rem;
             display: flex;
             flex-direction: column;
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
+        .panel:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 0 30px rgba(168, 85, 247, 0.2);
+        }
+
         .panel-title {
             font-family: var(--font-sans);
             font-size: 1.25rem;
@@ -140,17 +157,19 @@
             border-radius: 6px;
             cursor: pointer;
             font-weight: 500;
-            transition: background-color 0.2s, color 0.2s;
+            transition: background-color 0.2s, color 0.2s, transform 0.2s;
             margin-bottom: 0.5rem;
             border: 1px solid transparent;
         }
         .test-suite-item:hover {
             background-color: rgba(168, 85, 247, 0.1);
+            transform: translateX(5px);
         }
         .test-suite-item.active {
             background-color: var(--color-primary);
             color: white;
             font-weight: 600;
+            box-shadow: 0 0 15px rgba(168, 85, 247, 0.4);
         }
         .btn {
             font-family: var(--font-sans);
@@ -340,6 +359,8 @@
 </head>
 <body>
 
+    <canvas id="bg-canvas"></canvas>
+
     <div class="dashboard-layout">
         <header class="header">
             <a href="/" style="text-decoration: none;"><span class="logo">Synapse AI</span></a>
@@ -427,18 +448,56 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-        // --- API Configuration ---
-        const API_BASE_URL = 'https://synapse-ai-tool.onrender.com'; // For local testing
-        // const API_BASE_URL = 'https://your-synapse-backend.onrender.com'; // For production
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
 
-        // --- Data Store ---
+        // --- 3D Background ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg-canvas'), antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        camera.position.z = 5;
+
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 5000;
+        const posArray = new Float32Array(particlesCount * 3);
+        for (let i = 0; i < particlesCount * 3; i++) { posArray[i] = (Math.random() - 0.5) * 10; }
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const particlesMaterial = new THREE.PointsMaterial({ color: 0x9B59B6, size: 0.015, blending: THREE.AdditiveBlending, transparent: true });
+        const stars = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(stars);
+
+        const clock = new THREE.Clock();
+        function animate() {
+            const elapsedTime = clock.getElapsedTime();
+            stars.rotation.y = elapsedTime * 0.1;
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+
+        // --- Dashboard Logic ---
+        const API_BASE_URL = 'http://localhost:3000';
         let testSuites = {
             "ts_1": { name: "Login Functionality", steps: "Navigate to https://github.com/login\nType 'testuser' into input #login_field\nType 'wrongpassword' into input #password\nClick the 'Sign in' button\nAssert that element with text 'Incorrect username or password.' is visible" }
         };
         let activeSuiteId = "ts_1";
 
-        // --- DOM Elements ---
         const suiteList = document.getElementById('test-suite-list');
         const addSuiteBtn = document.getElementById('add-suite-btn');
         const editorTitle = document.getElementById('editor-title');
@@ -460,7 +519,6 @@
         const frameworkSelect = document.getElementById('framework-select');
         const languageSelect = document.getElementById('language-select');
 
-        // --- Chart.js Instance ---
         let resultsChart;
         function createOrUpdateChart(pass = 0, fail = 0) {
             const data = {
@@ -475,7 +533,6 @@
             }
         }
 
-        // --- Core UI Functions ---
         function renderSuiteList() {
             suiteList.innerHTML = '';
             Object.keys(testSuites).forEach(id => {
@@ -522,7 +579,6 @@
             createOrUpdateChart(passCount, failCount);
         }
 
-        // --- Event Listeners ---
         addSuiteBtn.addEventListener('click', () => {
             const suiteName = prompt("Enter new test suite name:", "New Test");
             if (suiteName) {
@@ -550,7 +606,6 @@
             uiOptions.style.display = outputUiCheckbox.checked ? 'block' : 'none';
         });
 
-        // --- API Call: Start Recording ---
         startRecordBtn.addEventListener('click', async () => {
             recordModal.style.display = 'none';
             resultsLog.innerHTML = `<div class="log-entry info">Starting recording session... Please use the new browser window that opens. Close it when you are finished.</div>`;
@@ -597,7 +652,6 @@
             }
         });
 
-        // --- API Call: Run Test ---
         runTestBtn.addEventListener('click', async () => {
             const steps = stepsTextarea.value;
             if (!steps.trim()) return alert("Please enter test steps.");
@@ -632,7 +686,6 @@
             }
         });
 
-        // --- Initial Load ---
         renderSuiteList();
         loadActiveSuite();
         createOrUpdateChart();

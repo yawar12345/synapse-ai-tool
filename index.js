@@ -1,49 +1,76 @@
-// index.js - The Complete and Fully Functional Backend Server
+// index.js - The Complete and Fully Functional Backend Server with Groq Fallback
 
 // --- 1. Import Dependencies ---
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors'); // Import the cors package
+const cors = require('cors');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Groq = require('groq-sdk'); // NEW: Import Groq
 const { chromium } = require('playwright');
 const fs = require('fs/promises');
 const path = require('path');
 const os = require('os');
 const { exec } = require('child_process');
-// --- We no longer need to import the browser package directly ---
 
 // --- 2. Initialize Express App ---
 const app = express();
 const port = 3000;
-app.use(cors()); // --- FIX: Enable CORS for all requests ---
+app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
-// --- 3. Initialize Gemini AI ---
+// --- 3. Initialize AI Clients ---
 if (!process.env.GEMINI_API_KEY) {
     console.error("\nFATAL ERROR: GEMINI_API_KEY is not found in .env file.");
-    process.exit(1);
 }
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const aiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+
+// NEW: Initialize Groq Client
+let groq;
+if (process.env.GROQ_API_KEY) {
+    groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+} else {
+    console.warn("\nWARNING: GROQ_API_KEY is not found in .env file. Fallback functionality will be disabled.");
+}
 
 
-// --- NEW: Resilient AI Call Helper with Retry Logic ---
-async function generateContentWithRetry(prompt, retries = 3, delay = 1000) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const result = await aiModel.generateContent(prompt);
-            return result;
-        } catch (error) {
-            // Check if the error is a 503 Service Unavailable
-            if (error.status === 503 && i < retries - 1) {
-                console.warn(`AI model is overloaded. Retrying in ${delay / 1000}s... (Attempt ${i + 1})`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                delay *= 2; // Exponential backoff
-            } else {
-                // For other errors or last retry, throw the error
-                throw error;
+// --- NEW: Resilient AI Call Helper with Groq Fallback Logic ---
+async function generateContentWithFallback(prompt) {
+    // --- Step 1: Try Gemini first ---
+    try {
+        console.log("Attempting to generate content with Gemini...");
+        const result = await geminiModel.generateContent(prompt);
+        console.log("Gemini succeeded.");
+        return result.response.text();
+    } catch (geminiError) {
+        console.error("Gemini API Error:", geminiError.message);
+        
+        // --- Step 2: If Gemini fails, fall back to Groq (if available) ---
+        if (groq) {
+            console.warn("Gemini failed. Falling back to Groq...");
+            try {
+                const chatCompletion = await groq.chat.completions.create({
+                    messages: [
+                        {
+                            role: "user",
+                            content: prompt,
+                        },
+                    ],
+                    model: "llama3-8b-8192", // Fast and capable model
+                });
+                
+                console.log("Groq succeeded.");
+                return chatCompletion.choices[0]?.message?.content || "";
+
+            } catch (groqError) {
+                console.error("Groq API Error:", groqError.message);
+                // If both fail, throw a final error
+                throw new Error("Both Gemini and Groq APIs failed.");
             }
+        } else {
+            // If Groq is not configured, just re-throw the original Gemini error
+            throw geminiError;
         }
     }
 }
@@ -57,47 +84,10 @@ app.post('/api/run-test', async (req, res) => {
 
     const resultsLog = [];
     try {
-        const prompt = `You are a highly intelligent and precise language-to-JSON converter for a test automation system. Your ONLY job is to convert the user's plain English steps into a structured JSON array based on the strict rules below.
-
-        **Rules:**
-        1.  Analyze each line of the user's input to determine the core action.
-        2.  Map the action to one of the following official command objects. Be flexible with synonyms.
-
-        **Command Mapping:**
-        -   If the user says "navigate", "go to", "open", or "visit" a URL, you MUST create this object:
-            \`{ "action": "navigate", "url": "THE_URL" }\`
-        -   If the user says "click", "press", or "tap" an element, you MUST create this object:
-            \`{ "action": "click", "selector": "THE_CSS_SELECTOR" }\`
-        -   If the user says "type", "fill", "enter", "input", or "write" text, you MUST create this object:
-            \`{ "action": "type", "selector": "THE_CSS_SELECTOR", "text": "THE_TEXT" }\`
-        -   If the user says "check", "assert", "verify", "see", or "find" an element, you MUST create this object:
-            \`{ "action": "assertVisible", "selector": "THE_CSS_SELECTOR_OR_TEXT_SELECTOR" }\`
-        -   If the user says "wait", "pause", "sleep", or "delay", you MUST create this object:
-            \`{ "action": "wait", "duration": THE_MILLISECONDS }\`
-
-        **Selector Rules:**
-        -   For finding elements by their text content, you MUST use the format: \`"selector": "text=The exact text"\`.
-        -   For all other elements, use standard CSS selectors (e.g., \`input[name="email"]\`).
-        -   **NEVER** use non-standard selectors like \`:contains()\`. It is invalid.
-
-        **Example:**
-        User Input:
-        \`navigate https://google.com\`
-        \`type "testing" in the search bar\`
-
-        Your Correct JSON Output:
-        [
-          { "action": "navigate", "url": "https://google.com" },
-          { "action": "type", "selector": "[aria-label='Search']", "text": "testing" }
-        ]
-
-        Now, convert the following user steps. Respond ONLY with the JSON array, nothing else.
-
-        **User Steps:**
-        ${steps}
-        `;
-        const aiResult = await generateContentWithRetry(prompt); // Use the new retry function
-        const jsonText = aiResult.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+        const prompt = `You are a highly intelligent language-to-JSON converter. Convert the user's plain English steps into a structured JSON array based on the strict rules below. Map synonyms like "go to" or "open" to the "navigate" action. For text selectors, use "text=Your Text". NEVER use ":contains()". Respond ONLY with the JSON array. USER STEPS: ${steps}`;
+        
+        const responseText = await generateContentWithFallback(prompt); // Use the new fallback function
+        const jsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
         
         let commands;
         try {
@@ -195,8 +185,8 @@ app.post('/api/record', (req, res) => {
                     const playwrightCode = await fs.readFile(tempCodeFile, 'utf-8');
                     if (playwrightCode) {
                         const prompt = `You are an expert Test Automation Engineer. Convert a recorded Playwright script into a clean, runnable test script for the framework "${framework}" and language "${language}". The script must be complete, including all necessary imports and boilerplate. Respond ONLY with the raw code. SOURCE SCRIPT: \`\`\`javascript\n${playwrightCode}\n\`\`\``;
-                        const aiResult = await generateContentWithRetry(prompt); // Use the new retry function
-                        uiScript = aiResult.response.text().trim().replace(/```[\w\s]*\n/g, '').replace(/```/g, '');
+                        const responseText = await generateContentWithFallback(prompt); // Use the new fallback function
+                        uiScript = responseText.replace(/```[\w\s]*\n/g, '').replace(/```/g, '');
                         console.log(`Generated UI script for ${framework}/${language}.`);
                     }
                 } catch (readError) {
@@ -241,8 +231,8 @@ app.post('/api/generate-cases', async (req, res) => {
 
     try {
         const prompt = `You are a Senior QA Engineer. Based on the following feature description, generate a comprehensive list of test steps in plain English. The steps should be clear, concise, and ready to be executed. Each step should be on a new line. FEATURE DESCRIPTION: "${description}" TEST STEPS:`;
-        const aiResult = await generateContentWithRetry(prompt); // Use the new retry function
-        const generatedSteps = aiResult.response.text().trim();
+        const responseText = await generateContentWithFallback(prompt); // Use the new fallback function
+        const generatedSteps = responseText.trim();
         
         console.log("Generated test cases.");
         res.status(200).json({ steps: generatedSteps });
@@ -305,5 +295,4 @@ function generateJmxFromRequests(requests) {
 app.listen(port, () => {
     console.log(`\n🚀 Synapse AI Dashboard server is running.`);
     console.log(`   Access the UI at http://localhost:${port}`);
-
 });

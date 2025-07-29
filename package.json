@@ -1,20 +1,25 @@
 {
   "name": "synapse-ai-tool",
   "version": "1.0.0",
+  "description": "AI-Powered Test Automation Tool",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "postinstall": "npx playwright install"
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "playwright",
+    "ai",
+    "testing"
+  ],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "@google/generative-ai": "^0.14.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "groq-sdk": "^0.5.0",
     "playwright": "^1.45.1"
   }
 }
