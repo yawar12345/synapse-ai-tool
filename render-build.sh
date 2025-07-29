@@ -1,9 +1,9 @@
-#!/usr/bin/env bash
-# exit on error
-set -o errexit
+#!/bin/bash
 
-echo "Installing dependencies..."
+echo "Installing npm dependencies..."
 npm install
 
-echo "Installing Playwright browsers (without system dependencies)..."
-npx playwright install chromium
+echo "Installing Playwright browsers..."
+npx playwright install
+
+echo "Build complete!"
