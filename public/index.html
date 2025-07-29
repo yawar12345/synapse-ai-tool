@@ -1,316 +1,426 @@
-// index.js - The Complete and Fully Functional Backend Server
-
-// --- 1. Import Dependencies ---
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { chromium } = require('playwright');
-const fs = require('fs/promises');
-const path = require('path');
-const os = require('os');
-const { exec } = require('child_process');
-
-// --- 2. Initialize Express App ---
-const app = express();
-const port = 3000;
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.static('public'));
-
-// --- 3. Initialize AI Clients ---
-if (!process.env.GEMINI_API_KEY) {
-    console.error("\nFATAL ERROR: GEMINI_API_KEY is not found in .env file.");
-}
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-
-let groq;
-if (process.env.GROQ_API_KEY) {
-    groq = new (require('groq-sdk'))({ apiKey: process.env.GROQ_API_KEY });
-} else {
-    console.warn("\nWARNING: GROQ_API_KEY is not found in .env file. Fallback functionality will be disabled.");
-}
-
-// --- Resilient AI Call Helper with Groq Fallback Logic ---
-async function generateContentWithFallback(prompt) {
-    try {
-        console.log("Attempting to generate content with Gemini...");
-        const result = await geminiModel.generateContent(prompt);
-        return result.response.text();
-    } catch (geminiError) {
-        console.error("Gemini API Error:", geminiError.message);
-        if (groq) {
-            console.warn("Gemini failed. Falling back to Groq...");
-            try {
-                const chatCompletion = await groq.chat.completions.create({
-                    messages: [{ role: "user", content: prompt }],
-                    model: "llama3-8b-8192",
-                });
-                return chatCompletion.choices[0]?.message?.content || "";
-            } catch (groqError) {
-                console.error("Groq API Error:", groqError.message);
-                throw new Error("Both Gemini and Groq APIs failed.");
-            }
-        } else {
-            throw geminiError;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synapse | AI-Powered Test Automation</title>
+    <style>
+        :root {
+            --color-bg: #04020a;
+            --color-primary: #a855f7; /* Purple */
+            --color-secondary: #d8b4fe; /* Light Purple */
+            --color-text: #e5e7eb;
+            --color-text-muted: #9ca3af;
+            --font-sans: 'Chakra Petch', sans-serif;
+            --font-body: 'Inter', sans-serif;
         }
-    }
-}
 
-// --- 4. API Endpoint to Run Tests ---
-app.post('/api/run-test', async (req, res) => {
-    console.log("Received test execution request...");
-    const { steps } = req.body;
-    if (!steps) return res.status(400).json({ error: 'Test steps are required.' });
+        @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@700&family=Inter:wght@400;500&family=Fira+Code:wght@400&display=swap');
 
-    const resultsLog = [];
-    try {
-        // --- FIX: A more robust prompt that understands synonyms and complex lines ---
-        const prompt = `
-        You are a highly intelligent language-to-JSON converter for a test automation system. Your ONLY job is to convert the user's plain English steps into a structured JSON array based on the strict rules below. You must handle multiple commands on a single line.
+        body {
+            font-family: var(--font-body);
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
 
-        **Rules:**
-        1.  Analyze the user's input to identify all distinct actions, even if they are on the same line.
-        2.  Map each action to one of the following official command objects. Be flexible with synonyms.
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
 
-        **Command Mapping:**
-        -   If the user says "navigate", "go to", "open", or "visit" a URL, you MUST create this object:
-            \`{ "action": "navigate", "url": "THE_URL" }\`
-        -   If the user says "click", "press", or "tap" an element, you MUST create this object:
-            \`{ "action": "click", "selector": "THE_CSS_SELECTOR" }\`
-        -   If the user says "type", "fill", "enter", "input", or "write" text, you MUST create this object:
-            \`{ "action": "type", "selector": "THE_CSS_SELECTOR", "text": "THE_TEXT" }\`
-        -   If the user says "check", "assert", "verify", "see", or "find" an element, you MUST create this object:
-            \`{ "action": "assertVisible", "selector": "THE_CSS_SELECTOR_OR_TEXT_SELECTOR" }\`
+        .scroll-section {
+            min-height: 100vh;
+            width: 100%;
+            padding: 4rem 2rem;
+            box-sizing: border-box;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+        }
 
-        **Selector Rules:**
-        -   For finding elements by their text content, you MUST use the format: \`"selector": "text=The exact text"\`.
-        -   For all other elements, use standard CSS selectors (e.g., \`input[name="email"]\`).
-        -   **NEVER** use non-standard selectors like \`:contains()\`. It is invalid.
+        .content-box {
+            max-width: 1100px;
+            text-align: center;
+        }
 
-        **Example of a complex, single-line request:**
-        User Input: "go to https://github.com/login enter username 'test' enter password 'secret' click the Sign in button"
-        Your Correct JSON Output:
-        [
-          { "action": "navigate", "url": "https://github.com/login" },
-          { "action": "type", "selector": "#login_field", "text": "test" },
-          { "action": "type", "selector": "#password", "text": "secret" },
-          { "action": "click", "selector": "input[name='commit']" }
-        ]
-
-        Now, convert the following user steps. Respond ONLY with the JSON array.
-
-        **User Steps:**
-        ${steps}
-        `;
-        const responseText = await generateContentWithFallback(prompt);
-        const jsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        .hero-title {
+            font-family: var(--font-sans);
+            font-size: clamp(3rem, 12vw, 8rem);
+            font-weight: 700;
+            margin: 0;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: #fff;
+            position: relative;
+            transform-style: preserve-3d;
+        }
         
-        let commands;
-        try {
-            commands = JSON.parse(jsonText);
-            resultsLog.push({ status: 'info', message: 'AI successfully translated steps to JSON.' });
-        } catch (e) {
-            throw new Error(`AI returned invalid JSON. Response: ${jsonText}`);
+        .hero-title .char {
+            display: inline-block;
+            opacity: 0;
+            transform: translateY(50px) rotateX(-90deg);
+            background: linear-gradient(45deg, #2c1e3e, #d8b4fe 40%, #ffffff 50%, #d8b4fe 60%, #2c1e3e 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 25px rgba(168, 85, 247, 0.5);
+            transition: transform 0.3s ease, color 0.3s ease;
         }
 
-        const browser = await chromium.launch({ headless: true });
-        const context = await browser.newContext();
-        const page = await context.newPage();
-        resultsLog.push({ status: 'info', message: 'Browser launched.' });
+        .hero-subtitle {
+            font-size: clamp(1rem, 3vw, 1.25rem);
+            font-weight: 400;
+            margin: 1.5rem 0 2.5rem 0;
+            color: var(--color-text-muted);
+            max-width: 600px;
+            line-height: 1.7;
+            letter-spacing: 1px;
+            margin-left: auto;
+            margin-right: auto;
+        }
 
-        for (const command of commands) {
-            try {
-                switch (command.action) {
-                    case 'navigate':
-                        await page.goto(command.url, { timeout: 15000 });
-                        resultsLog.push({ status: 'success', message: `Navigated to ${command.url}` });
-                        break;
-                    case 'click':
-                        await page.locator(command.selector).click({ timeout: 10000 });
-                        resultsLog.push({ status: 'success', message: `Clicked: '${command.selector}'` });
-                        break;
-                    case 'type':
-                        await page.locator(command.selector).fill(command.text);
-                        resultsLog.push({ status: 'success', message: `Typed "${command.text}" into '${command.selector}'` });
-                        break;
-                    case 'assertVisible':
-                        const element = page.locator(command.selector);
-                        await element.waitFor({ state: 'visible', timeout: 10000 });
-                        resultsLog.push({ status: 'success', message: `Asserted visible: '${command.selector}'` });
-                        break;
-                    case 'wait':
-                        await page.waitForTimeout(command.duration);
-                        resultsLog.push({ status: 'info', message: `Waited for ${command.duration}ms` });
-                        break;
-                    default: throw new Error(`Unknown command: ${command.action}`);
+        .cta-button {
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 700;
+            text-decoration: none;
+            color: var(--color-primary);
+            background-color: transparent;
+            border: 2px solid var(--color-primary);
+            padding: 0.8rem 2.5rem;
+            border-radius: 2px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            box-shadow: 0 0 15px 0 var(--color-primary) inset, 0 0 15px 0 var(--color-primary);
+        }
+
+        .cta-button:hover {
+            background-color: var(--color-primary);
+            color: var(--color-bg);
+            box-shadow: 0 0 25px 0 var(--color-primary);
+            transform: scale(1.05);
+        }
+
+        /* Feature Showcase Styles */
+        .feature-showcase {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 3rem;
+            align-items: center;
+            text-align: left;
+            width: 100%;
+        }
+
+        .panel {
+            background: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid #30363D;
+            border-radius: 8px;
+            padding: 2rem;
+            height: 450px;
+            overflow: hidden;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+        }
+        
+        .code-panel {
+            white-space: pre;
+            color: var(--color-text-muted);
+            position: relative;
+        }
+        .code-panel .token-keyword { color: #c586c0; }
+        .code-panel .token-string { color: #ce9178; }
+        .code-panel .token-function { color: #dcdcaa; }
+        .code-panel .token-comment { color: #6a9955; }
+        .code-output { position: absolute; top: 2rem; left: 2rem; opacity: 0; }
+
+        .feature-description h2 {
+            font-family: var(--font-sans);
+            font-size: 2.5rem;
+            color: var(--color-primary);
+            margin-bottom: 1rem;
+        }
+        .feature-description p {
+            line-height: 1.8;
+            color: var(--color-text-muted);
+        }
+        
+        /* Mock UI for animation */
+        .mock-ui {
+            padding: 1rem;
+        }
+        .mock-dropdown {
+            background: #111827; border: 1px solid #30363D; border-radius: 6px; padding: 0.75rem; margin-top: 1rem;
+        }
+        .mock-dropdown-label { font-weight: 500; color: var(--color-text-muted); margin-bottom: 0.5rem; }
+        .mock-dropdown-value { font-weight: 700; color: var(--color-primary); }
+
+        /* Recorder animation styles */
+        .recorder-animation-panel {
+            position: relative;
+        }
+        .mock-browser {
+            width: 90%; height: 80%; background: #e5e7eb; border-radius: 6px; position: absolute; top: 10%; left: 5%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); overflow: hidden;
+        }
+        .mock-browser-header { height: 25px; background: #374151; display: flex; align-items: center; padding: 0 10px; gap: 6px; }
+        .mock-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; }
+        .mock-cursor {
+            width: 20px; height: 20px; position: absolute; top: 40%; left: 30%;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M5.6,18.4l5.2-1.8l2.1,5.9l1.9-0.7l-2.1-5.9l5.2-1.8L5.6,2.1V18.4z"/></svg>');
+            z-index: 10;
+        }
+        .generated-code-line, .generated-jmx {
+            position: absolute; right: -20%; background: #1F2937; padding: 5px 10px; border-radius: 4px;
+            opacity: 0; font-size: 0.8rem;
+        }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="bg-canvas"></canvas>
+
+    <main>
+        <section class="scroll-section" id="hero-section">
+            <div class="content-box">
+                <h1 class="hero-title">SYNAPSE</h1>
+                <p class="hero-subtitle">
+                    An intelligent core for seamless automation. Translating intent into action across the digital cosmos.
+                </p>
+                <a href="/dashboard.html" class="cta-button">Launch Dashboard</a>
+            </div>
+        </section>
+
+        <section class="scroll-section" id="feature-nl2code">
+            <div class="content-box feature-showcase">
+                <div class="feature-description">
+                    <h2>From Intent to Action</h2>
+                    <p>Describe your test in plain English. Synapse understands your intent and instantly generates the precise automation script in your chosen framework and language, turning hours of coding into seconds of thought.</p>
+                </div>
+                <div class="panel">
+                    <div class="mock-ui">
+                        <div id="nl-input" style="min-height: 100px; color: var(--color-secondary);"></div>
+                        <div class="mock-dropdown">
+                            <div class="mock-dropdown-label">Framework</div>
+                            <div id="framework-value" class="mock-dropdown-value">Playwright</div>
+                        </div>
+                        <div class="mock-dropdown">
+                            <div class="mock-dropdown-label">Language</div>
+                            <div id="language-value" class="mock-dropdown-value">JavaScript</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="scroll-section" id="feature-recorder">
+            <div class="content-box feature-showcase">
+                 <div class="feature-description">
+                    <h2>Record & Replicate</h2>
+                    <p>Perform a user journey once. Our intelligent recorder captures every UI interaction and background API call, generating both a functional test script and a JMeter performance test plan from a single session.</p>
+                </div>
+                <div class="panel recorder-animation-panel">
+                    <div class="mock-browser">
+                        <div class="mock-browser-header">
+                            <div class="mock-dot"></div><div class="mock-dot"></div><div class="mock-dot"></div>
+                        </div>
+                    </div>
+                    <div class="mock-cursor"></div>
+                    <div class="generated-code-line" style="top: 20%;"><span class="token-keyword">await</span> page.<span class="token-function">click</span>(<span class="token-string">'#login'</span>);</div>
+                    <div class="generated-code-line" style="top: 35%;"><span class="token-keyword">await</span> page.<span class="token-function">fill</span>(<span class="token-string">'#user'</span>, ...);</div>
+                    <div class="generated-jmx" style="bottom: 20%;"><i class="fas fa-file-alt"></i> api_plan.jmx</div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="scroll-section" id="feature-dashboard">
+             <div class="content-box">
+                <h2 style="font-family: var(--font-sans); font-size: 3rem; color: var(--color-primary);">Visualize Success</h2>
+                <p class="hero-subtitle">Go beyond simple pass/fail. Our interactive dashboard provides detailed logs, performance charts, and downloadable artifacts, giving your team a clear and actionable overview of application health.</p>
+                <a href="/dashboard.html" class="cta-button">Explore the Dashboard</a>
+            </div>
+        </section>
+    </main>
+
+    <!-- Importmap for Three.js and GSAP -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "gsap": "https://unpkg.com/gsap@3.12.5/index.js",
+                "gsap/ScrollTrigger": "https://unpkg.com/gsap@3.12.5/ScrollTrigger.js",
+                "gsap/TextPlugin": "https://unpkg.com/gsap@3.12.5/TextPlugin.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { gsap } from 'gsap';
+        import { ScrollTrigger } from 'gsap/ScrollTrigger';
+        import { TextPlugin } from 'gsap/TextPlugin';
+
+        gsap.registerPlugin(ScrollTrigger, TextPlugin);
+
+        // --- 3D Scene Setup ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg-canvas'), antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        camera.position.z = 10;
+
+        // --- 3D Objects (Nebula) ---
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 7000;
+        const posArray = new Float32Array(particlesCount * 3);
+        for (let i = 0; i < particlesCount * 3; i++) { posArray[i] = (Math.random() - 0.5) * 150; }
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const particlesMaterial = new THREE.PointsMaterial({ 
+            color: 0x9B59B6, 
+            size: 0.15, 
+            blending: THREE.AdditiveBlending, 
+            transparent: true, 
+            opacity: 0.7 
+        });
+        const nebula = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(nebula);
+
+        // --- Central Energy Orb ---
+        const orbGeometry = new THREE.SphereGeometry(0.5, 32, 32);
+        const orbMaterial = new THREE.MeshBasicMaterial({ color: 0xd8b4fe, transparent: true, opacity: 0.5 });
+        const energyOrb = new THREE.Mesh(orbGeometry, orbMaterial);
+        const orbLight = new THREE.PointLight(0xa855f7, 50, 100);
+        energyOrb.add(orbLight);
+        scene.add(energyOrb);
+
+        // --- Initial Load Animation ---
+        const title = document.querySelector('.hero-title');
+        title.innerHTML = title.textContent.split('').map(char => `<span class="char">${char}</span>`).join('');
+        gsap.to(".char", {
+            opacity: 1,
+            y: 0,
+            rotateX: 0,
+            stagger: 0.05,
+            duration: 1.5,
+            ease: 'elastic.out(1, 0.5)',
+            delay: 0.5
+        });
+
+        // --- GSAP Scroll Animations ---
+        const sections = document.querySelectorAll('.scroll-section');
+        sections.forEach(section => {
+            gsap.fromTo(section, { opacity: 0, y: 50 }, {
+                opacity: 1,
+                y: 0,
+                duration: 1,
+                scrollTrigger: {
+                    trigger: section,
+                    start: 'top 80%',
+                    toggleActions: 'play none none reverse'
                 }
-            } catch (error) {
-                const errorMessage = `Failed on action '${command.action}'. Error: ${error.message.split('\n')[0]}`;
-                resultsLog.push({ status: 'error', message: errorMessage });
-                await browser.close();
-                return res.status(200).json({ log: resultsLog });
+            });
+        });
+
+        const tl = gsap.timeline({
+            scrollTrigger: {
+                trigger: "main",
+                start: "top top",
+                end: "bottom bottom",
+                scrub: 1.5,
             }
-        }
-        await browser.close();
-        res.status(200).json({ log: resultsLog });
-    } catch (error) {
-        console.error('Error during test run:', error);
-        resultsLog.push({ status: 'error', message: `A critical server error occurred: ${error.message}` });
-        res.status(500).json({ log: resultsLog });
-    }
-});
+        });
+        tl.to(nebula.rotation, { y: 1.5, x: -0.5, z: 0.5 }, 0)
+          .to(camera.position, { z: 25 }, 0)
+          .to(energyOrb.position, { y: -window.innerHeight * 1.5 }, 1)
+          .to(camera.position, { z: 8, x: 3 }, 1)
+          .to(energyOrb.position, { y: -window.innerHeight * 2.5, x: 50 }, 2)
+          .to(camera.position, { z: 8, x: -3 }, 2)
+          .to(energyOrb.position, { y: -window.innerHeight * 3.5, x: 0 }, 3)
+          .to(camera.position, { z: 10, x: 0 }, 3);
 
-// --- 5. API Endpoint for Recording (STABLE VERSION) ---
-app.post('/api/record', (req, res) => {
-    console.log("Received recording request (exec method)...");
-    const { startUrl, generateUI, generateJMX, framework, language } = req.body;
-    if (!startUrl) return res.status(400).json({ error: 'Starting URL is required.' });
+        // --- NL to Code Animation ---
+        const nlText = `Test the login flow with an invalid password.`;
+        const frameworks = ["Playwright", "Cypress", "Selenium", "Playwright"];
+        const languages = ["JavaScript", "JavaScript", "Python", "JavaScript"];
 
-    const tempCodeFile = path.join(os.tmpdir(), `codegen-${Date.now()}.js`);
-    const harFile = generateJMX ? path.join(os.tmpdir(), `network-${Date.now()}.har`) : null;
+        const nlTl = gsap.timeline({
+            scrollTrigger: {
+                trigger: "#feature-nl2code",
+                start: "top center",
+                toggleActions: "play reverse play reverse"
+            },
+            repeat: -1,
+            repeatDelay: 2
+        });
+        nlTl.to("#nl-input", { text: { value: nlText }, duration: 2, ease: "none" })
+            .to("#framework-value", { text: frameworks[1], duration: 1, delay: 1 })
+            .to("#language-value", { text: languages[1], duration: 1 }, "<")
+            .to("#framework-value", { text: frameworks[2], duration: 1, delay: 1 })
+            .to("#language-value", { text: languages[2], duration: 1 }, "<")
+            .to("#framework-value", { text: frameworks[3], duration: 1, delay: 1 })
+            .to("#language-value", { text: languages[3], duration: 1 }, "<")
+            .to("#nl-input", { text: { value: "" }, duration: 1, delay: 1 });
+            
+        // --- Recorder Animation ---
+        const recorderTl = gsap.timeline({
+            scrollTrigger: {
+                trigger: "#feature-recorder",
+                start: "top center",
+                toggleActions: "play reverse play reverse"
+            },
+            repeat: -1,
+            repeatDelay: 1
+        });
+        recorderTl.fromTo(".mock-cursor", { x: 0, y: 0, opacity: 0 }, { opacity: 1, duration: 0.5 })
+                  .to(".mock-cursor", { duration: 1, x: 100, y: 50, ease: "power1.inOut" })
+                  .to(".generated-code-line", { opacity: 1, x: -20, stagger: 0.5, duration: 0.5 }, "-=0.5")
+                  .to(".mock-cursor", { duration: 1, x: 50, y: 120, ease: "power1.inOut" })
+                  .to(".generated-jmx", { opacity: 1, x: -20, duration: 0.5 }, "-=0.5")
+                  .to(".mock-cursor", { opacity: 0, duration: 0.5, delay: 1 })
+                  .set(".generated-code-line, .generated-jmx", { opacity: 0, x: 0 });
 
-    let command = `npx playwright codegen "${startUrl}" --target javascript -o "${tempCodeFile}"`;
-    if (harFile) {
-        command += ` --save-har="${harFile}"`;
-    }
-
-    console.log(`Executing command: ${command}`);
-
-    let stderrData = '';
-    const codegenProcess = exec(command);
-
-    codegenProcess.stderr.on('data', (data) => {
-        console.error(`Codegen stderr: ${data}`);
-        stderrData += data;
-    });
-
-    codegenProcess.on('exit', async (code) => {
-        console.log(`Codegen process exited with code ${code}.`);
+        // --- Mouse Parallax & Animation Loop ---
+        const cursor = { x: 0, y: 0 };
+        const mouse = new THREE.Vector2();
+        window.addEventListener('mousemove', (event) => {
+            cursor.x = event.clientX / window.innerWidth - 0.5;
+            cursor.y = event.clientY / window.innerHeight - 0.5;
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        });
         
-        if (code !== 0) {
-            const errorMessage = `Recording session failed. Details: ${stderrData || 'The browser may have closed unexpectedly or the URL was invalid.'}`;
-            return res.status(500).json({ error: errorMessage });
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        });
+
+        const clock = new THREE.Clock();
+        function animate() {
+            const elapsedTime = clock.getElapsedTime();
+            
+            const parallaxX = cursor.x * 5;
+            const parallaxY = -cursor.y * 5;
+            camera.position.x += (parallaxX - camera.position.x) * 0.02;
+            camera.position.y += (parallaxY - camera.position.y) * 0.02;
+            camera.lookAt(scene.position);
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
         }
-        
-        console.log("Processing successful recording...");
-
-        try {
-            let uiScript = "";
-            if (generateUI) {
-                try {
-                    const playwrightCode = await fs.readFile(tempCodeFile, 'utf-8');
-                    if (playwrightCode) {
-                        const prompt = `You are an expert Test Automation Engineer. Convert a recorded Playwright script into a clean, runnable test script for the framework "${framework}" and language "${language}". The script must be complete, including all necessary imports and boilerplate. Respond ONLY with the raw code. SOURCE SCRIPT: \`\`\`javascript\n${playwrightCode}\n\`\`\``;
-                        const responseText = await generateContentWithFallback(prompt);
-                        uiScript = responseText.replace(/```[\w\s]*\n/g, '').replace(/```/g, '');
-                        console.log(`Generated UI script for ${framework}/${language}.`);
-                    }
-                } catch (readError) {
-                    console.warn("Could not read codegen output file:", readError.message);
-                    uiScript = "// No UI actions were recorded.";
-                }
-            }
-
-            let jmxFileContent = "";
-            if (generateJMX && harFile) {
-                try {
-                    const harContent = await fs.readFile(harFile, 'utf-8');
-                    const harJson = JSON.parse(harContent);
-                    const requests = harJson.log.entries.map(entry => entry.request);
-                    jmxFileContent = generateJmxFromRequests(requests);
-                    console.log("Generated JMX file content.");
-                } catch (harError) {
-                    console.error("Could not read or parse HAR file:", harError.message);
-                }
-            }
-
-            await fs.unlink(tempCodeFile).catch(e => console.error("Error deleting temp codegen file:", e.message));
-            if (harFile) {
-                await fs.unlink(harFile).catch(e => console.error("Error deleting temp HAR file:", e.message));
-            }
-
-            res.status(200).json({ uiScript, jmxFileContent });
-
-        } catch (error) {
-            console.error('Error processing recording results:', error);
-            res.status(500).json({ error: `Failed to process recording: ${error.message}` });
-        }
-    });
-});
-
-
-// --- 6. API Endpoint for AI Test Case Generation ---
-app.post('/api/generate-cases', async (req, res) => {
-    console.log("Received test case generation request...");
-    const { description } = req.body;
-    if (!description) return res.status(400).json({ error: 'A description is required.' });
-
-    try {
-        const prompt = `You are a Senior QA Engineer. Based on the following feature description, generate a comprehensive list of test steps in plain English. The steps should be clear, concise, and ready to be executed. Each step should be on a new line. FEATURE DESCRIPTION: "${description}" TEST STEPS:`;
-        const responseText = await generateContentWithFallback(prompt);
-        const generatedSteps = responseText.trim();
-        
-        console.log("Generated test cases.");
-        res.status(200).json({ steps: generatedSteps });
-
-    } catch (error) {
-        console.error('Error generating test cases:', error);
-        res.status(500).json({ error: `Failed to generate test cases: ${error.message}` });
-    }
-});
-
-
-// --- 7. Helper to Generate JMX File ---
-function generateJmxFromRequests(requests) {
-    const threadGroup = requests.map((req) => {
-        const url = new URL(req.url);
-        if (['.css', '.js', '.png', '.jpg', '.gif', '.svg', '.woff', '.ico'].some(ext => url.pathname.endsWith(ext))) {
-            return '';
-        }
-
-        return `
-        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="${req.method} ${url.pathname.substring(0, 100)}" enabled="true">
-          <stringProp name="HTTPSampler.domain">${url.hostname}</stringProp>
-          <stringProp name="HTTPSampler.port">${url.port || (url.protocol === 'https:' ? '443' : '80')}</stringProp>
-          <stringProp name="HTTPSampler.protocol">${url.protocol.slice(0, -1)}</stringProp>
-          <stringProp name="HTTPSampler.path">${url.pathname}${url.search}</stringProp>
-          <stringProp name="HTTPSampler.method">${req.method}</stringProp>
-          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
-          <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
-          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
-          <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
-        </HTTPSamplerProxy>
-        <hashTree/>`;
-    }).join('');
-
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.4.1">
-  <hashTree>
-    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Recorded API Test" enabled="true">
-    </TestPlan>
-    <hashTree>
-      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="User Group" enabled="true">
-        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
-        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
-          <boolProp name="LoopController.continue_forever">false</boolProp>
-          <stringProp name="LoopController.loops">1</stringProp>
-        </elementProp>
-        <stringProp name="ThreadGroup.num_threads">1</stringProp>
-        <stringProp name="ThreadGroup.ramp_time">1</stringProp>
-        <boolProp name="ThreadGroup.scheduler">false</boolProp>
-      </ThreadGroup>
-      <hashTree>
-        ${threadGroup}
-      </hashTree>
-    </hashTree>
-  </hashTree>
-</jmeterTestPlan>`;
-}
-
-// --- 8. Start Server ---
-app.listen(port, () => {
-    console.log(`\n🚀 Synapse AI Dashboard server is running.`);
-    console.log(`   Access the UI at http://localhost:${port}`);
-});
+        animate();
+    </script>
+</body>
+</html>
