@@ -346,4 +346,5 @@ function generateJmxFromRequests(requests) {
 app.listen(port, () => {
     console.log(`\n🚀 Synapse AI Dashboard server is running.`);
     console.log(`   Access the UI at http://localhost:${port}`);
+
 });
