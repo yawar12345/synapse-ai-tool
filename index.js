@@ -204,7 +204,8 @@ app.post('/api/record', (req, res) => {
     const tempCodeFile = path.join(os.tmpdir(), `codegen-${Date.now()}.js`);
     const harFile = generateJMX ? path.join(os.tmpdir(), `network-${Date.now()}.har`) : null;
 
-    let command = `npx playwright codegen "${startUrl}" --target javascript -o "${tempCodeFile}"`;
+    // --- FIX: Prepend the command with xvfb-run to create a virtual display ---
+    let command = `xvfb-run --auto-servernum npx playwright codegen "${startUrl}" --target javascript -o "${tempCodeFile}"`;
     if (harFile) {
         command += ` --save-har="${harFile}"`;
     }
@@ -346,5 +347,4 @@ function generateJmxFromRequests(requests) {
 app.listen(port, () => {
     console.log(`\n🚀 Synapse AI Dashboard server is running.`);
     console.log(`   Access the UI at http://localhost:${port}`);
-
 });
