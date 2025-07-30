@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: synapse-ai-tool
+    env: node
+    plan: free
+    buildCommand: "./render-build.sh"
+    startCommand: "node index.js"
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - fromGroup: synapse-secrets
+    buildFilter:
+      paths:
+        - "src/**/*"
+        - "public/**/*"
+        - "package.json"
+        - "render-build.sh"
+    # This is the crucial part that installs the missing system packages
+    nativeEnvironment:
+      systemPackages:
+        - name: "xvfb"
+        - name: "xauth"
+
+envVarGroups:
+  - name: synapse-secrets
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
